@@ -353,3 +353,21 @@ export default {
 	filterNodeArgumentsForWorkerThreads: argument => !processOnly.has(argument)
 }
 ```
+
+# AVA_IMPORT_FROM_PROJECT_NO_STUB environment variable
+                                                                                                                                                 
+Problem: The importFromProject function in lib/worker/base.js unconditionally writes a stub file to node_modules/.cache/ava/ to enable ESM     
+import() resolution from the project's context. In CI environments where node_modules is mounted read-only (e.g. cached and shared across
+runs), this write fails even when --no-cache is passed, because importFromProject is not governed by the cache flag — it's a separate
+mechanism.
+
+Change: Added an opt-in environment variable AVA_IMPORT_FROM_PROJECT_NO_STUB=1 that replaces the stub-file approach with createRequire scoped
+to the project directory. Instead of writing a file and importing from it, it uses require.resolve() to resolve the bare specifier from the
+project's perspective, then passes the absolute path to import(). No file I/O required.
+
+Trade-off: require.resolve() uses the "require" export condition when resolving packages with conditional exports, whereas the stub approach
+uses the "import" condition. For the typical --require use cases (loaders, register hooks) this is unlikely to matter, but it's a behavioral
+difference worth noting.
+
+Usage: `AVA_IMPORT_FROM_PROJECT_NO_STUB=1 ava --no-cache`
+
